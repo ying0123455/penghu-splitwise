@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>澎湖四天三夜分帳系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        body {
+            background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        .ocean-card {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            border-radius: 1rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+        }
+        .ocean-gradient {
+            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+        }
+        /* 隱藏捲軸但保有功能 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="min-h-screen pb-12 text-slate-800">
+
+    <nav class="ocean-gradient text-white shadow-lg sticky top-0 z-50 px-4 py-3">
+        <div class="max-w-4xl mx-auto flex justify-between items-center">
+            <h1 class="text-xl font-bold tracking-wider"><i class="fa-solid fa-umbrella-beach mr-2"></i>澎湖四天三夜分帳系統</h1>
+            <div id="roomBadge" class="bg-white/20 px-3 py-1 rounded-full text-xs font-semibold backdrop-blur-sm hidden">
+                房間: <span id="roomCodeDisplay">----</span>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto px-4 mt-6 space-y-6">
+
+        <div id="roomPanel" class="ocean-card p-6 text-center">
+            <h2 class="text-lg font-bold text-sky-800 mb-4"><i class="fa-solid fa-door-open mr-2"></i>歡迎來到澎湖分帳系統</h2>
+            <div class="flex flex-col sm:flex-row justify-center gap-4">
+                <button onclick="createNewRoom()" class="ocean-gradient text-white font-semibold px-6 py-3 rounded-lg shadow hover:opacity-90 transition">
+                    <i class="fa-solid fa-plus mr-2"></i>創建新旅遊房間
+                </button>
+            </div>
+            <div class="mt-4 text-sm text-slate-500">※ 開啟他人分享的連結即可自動加入</div>
+        </div>
+
+        <div id="mainApp" class="space-y-6 hidden">
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="ocean-card p-6 flex flex-col justify-between">
+                    <div>
+                        <h3 class="font-bold text-sky-800 mb-2"><i class="fa-solid fa-share-nodes mr-2"></i>邀請同伴</h3>
+                        <p class="text-sm text-slate-600 mb-4">分享此連結給 王、羅、謝、張，即可多人實時同步共同記帳！</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <input type="text" id="shareUrlInput" readonly class="bg-slate-100 border border-slate-300 rounded px-3 py-2 text-sm flex-1 focus:outline-none">
+                        <button onclick="copyShareUrl()" class="bg-sky-600 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-sky-700">
+                            複製
+                        </button>
+                    </div>
+                </div>
+
+                <div class="ocean-card p-6">
+                    <h3 class="font-bold text-sky-800 mb-2"><i class="fa-solid fa-wallet mr-2"></i>預算管理</h3>
+                    <div class="mb-3 flex items-center justify-between">
+                        <label class="text-sm font-medium text-slate-600">總預算設定：</label>
+                        <input type="number" id="totalBudgetInput" onchange="updateBudgetView()" class="w-32 border border-slate-300 rounded px-2 py-1 text-right font-bold text-sky-700">
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-sm">
+                            <span>已花費: <b id="bgSpent">0</b> 元</span>
+                            <span>剩餘: <b id="bgLeft">0</b> 元</span>
+                        </div>
+                        <div class="w-full bg-slate-200 rounded-full h-4 overflow-hidden">
+                            <div id="budgetBar" class="bg-emerald-500 h-full transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                        <div id="budgetWarning" class="text-red-500 text-xs font-bold hidden animate-pulse">
+                            <i class="fa-solid fa-triangle-exclamation mr-1"></i> 警報：已超出預算！
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ocean-card p-6 border-2 border-sky-300 bg-sky-50/80">
+                <h3 class="text-xl font-bold text-sky-900 mb-4 text-center"><i class="fa-solid fa-hand-holding-dollar mr-2"></i>誰需要給誰多少錢 (最佳化結算)</h3>
+                <div id="settlementResults" class="flex flex-col items-center justify-center gap-3 py-4 text-xl sm:text-2xl font-black text-slate-800">
+                    <span class="text-base font-normal text-slate-500">暫無帳務結算資訊</span>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="ocean-card p-6">
+                    <h3 class="font-bold text-sky-800 mb-4"><i class="fa-solid fa-users mr-2"></i>成員收支統計</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead>
+                                <tr class="border-b border-slate-200 text-slate-500">
+                                    <th class="pb-2">成員</th>
+                                    <th class="pb-2 text-right">已支付</th>
+                                    <th class="pb-2 text-right">應負擔</th>
+                                    <th class="pb-2 text-right">淨額</th>
+                                </tr>
+                            </thead>
+                            <tbody id="memberStatsTable">
+                                </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="ocean-card p-6 flex flex-col justify-between gap-4">
+                    <h3 class="font-bold text-sky-800"><i class="fa-solid fa-chart-pie mr-2"></i>統計圖表</h3>
+                    <div class="flex flex-col sm:flex-row gap-4 justify-around items-center">
+                        <div class="w-40 h-40"><canvas id="payPieChart"></canvas></div>
+                        <div class="w-40 h-40"><canvas id="categoryBarChart"></canvas></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ocean-card p-6">
+                <h3 id="formTitle" class="font-bold text-sky-800 mb-4"><i class="fa-solid fa-pen-to-square mr-2"></i>新增款項支出</h3>
+                <form id="expenseForm" onsubmit="handleFormSubmit(event)" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <input type="hidden" id="editExpenseId">
+                    
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">項目名稱 *</label>
+                        <input type="text" id="expTitle" required placeholder="例如：阿東海產" class="w-full border border-slate-300 rounded p-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">金額 *</label>
+                        <input type="number" id="expAmount" required min="1" placeholder="金額" class="w-full border border-slate-300 rounded p-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">消費類別 *</label>
+                        <select id="expCategory" class="w-full border border-slate-300 rounded p-2 text-sm bg-white">
+                            <option value="交通">交通</option>
+                            <option value="住宿">住宿</option>
+                            <option value="飲食" selected>飲食</option>
+                            <option value="娛樂">娛樂</option>
+                            <option value="其他">其他</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">付款人 *</label>
+                        <select id="expPayer" class="w-full border border-slate-300 rounded p-2 text-sm bg-white">
+                            <option value="王">王</option>
+                            <option value="羅">羅</option>
+                            <option value="謝">謝</option>
+                            <option value="張">張</option>
+                        </select>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">分攤人員 (可複選) *</label>
+                        <div class="flex gap-4 bg-white border border-slate-300 rounded p-2 text-sm">
+                            <label class="flex items-center gap-1 cursor-pointer"><input type="checkbox" name="splitMembers" value="王" checked> 王</label>
+                            <label class="flex items-center gap-1 cursor-pointer"><input type="checkbox" name="splitMembers" value="羅" checked> 羅</label>
+                            <label class="flex items-center gap-1 cursor-pointer"><input type="checkbox" name="splitMembers" value="謝" checked> 謝</label>
+                            <label class="flex items-center gap-1 cursor-pointer"><input type="checkbox" name="splitMembers" value="張" checked> 張</label>
+                        </div>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">備註</label>
+                        <input type="text" id="expNotes" placeholder="補充說明..." class="w-full border border-slate-300 rounded p-2 text-sm">
+                    </div>
+                    
+                    <div class="sm:col-span-2 flex justify-end gap-2 mt-2">
+                        <button type="button" id="cancelEditBtn" onclick="resetExpenseForm()" class="bg-slate-300 text-slate-700 px-4 py-2 rounded text-sm font-semibold hidden">取消編輯</button>
+                        <button type="submit" class="ocean-gradient text-white px-6 py-2 rounded text-sm font-semibold hover:opacity-90">儲存支出</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="ocean-card p-6">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                    <h3 class="font-bold text-sky-800"><i class="fa-solid fa-list-check mr-2"></i>支出紀錄明細</h3>
+                    <div class="flex flex-wrap gap-2">
+                        <input type="text" id="searchBar" oninput="renderApp()" placeholder="搜尋項目/備註..." class="border border-slate-300 rounded px-2 py-1 text-xs w-36">
+                        <select id="sortBy" onchange="renderApp()" class="border border-slate-300 rounded px-2 py-1 text-xs bg-white">
+                            <option value="dateDesc">時間：新 → 舊</option>
+                            <option value="dateAsc">時間：舊 → 新</option>
+                            <option value="amountDesc">金額：高 → 低</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead>
+                            <tr class="bg-sky-100 text-sky-900 border-b border-sky-200">
+                                <th class="p-2 rounded-l font-semibold">摘要</th>
+                                <th class="p-2 font-semibold">類別</th>
+                                <th class="p-2 font-semibold text-right">金額</th>
+                                <th class="p-2 font-semibold">付款者 / 分攤</th>
+                                <th class="p-2 rounded-r font-semibold text-center">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="expenseTableBody">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="ocean-card p-4 flex flex-wrap justify-between items-center gap-4 text-xs">
+                <span class="text-slate-500 font-medium">資料管理備份：</span>
+                <div class="flex gap-2">
+                    <button onclick="exportToJson()" class="bg-emerald-600 text-white px-3 py-1.5 rounded hover:bg-emerald-700 transition"><i class="fa-solid fa-file-export mr-1"></i>匯出 JSON</button>
+                    <label class="bg-amber-600 text-white px-3 py-1.5 rounded hover:bg-amber-700 transition cursor-pointer flex items-center">
+                        <i class="fa-solid fa-file-import mr-1"></i>匯入 JSON
+                        <input type="file" accept=".json" onchange="importFromJson(event)" class="hidden">
+                    </label>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, doc, setDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // ==========================================
+        // 4. 請在此處填入你自己的 Firebase 專案設定
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyAmA-XTUmDuT2an7MJ_z8tKt6B_Lh_Yl-0",
+            authDomain: "penghu-splitwise.firebaseapp.com",
+            projectId: "penghu-splitwise",
+            storageBucket: "penghu-splitwise.firebasestorage.app",
+            messagingSenderId: "502689058095",
+            appId: "1:502689058095:web:5da31dc7523ba14fa725da"
+        };
+
+        // 初始化 Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // 全域變數定義
+        const MEMBERS = ['王', '羅', '謝', '張'];
+        let currentRoomId = '';
+        let roomData = {
+            budget: 30000,
+            expenses: {}
+        };
+        
+        // 圖表變數實例
+        let pieChartInstance = null;
+        let barChartInstance = null;
+
+        // 綁定全域函式供 HTML 行內 onclick 呼叫
+        window.createNewRoom = createNewRoom;
+        window.copyShareUrl = copyShareUrl;
+        window.updateBudgetView = updateBudgetView;
+        window.handleFormSubmit = handleFormSubmit;
+        window.resetExpenseForm = resetExpenseForm;
+        window.editExpense = editExpense;
+        window.deleteExpense = deleteExpense;
+        window.renderApp = renderApp;
+        window.exportToJson = exportToJson;
+        window.importFromJson = importFromJson;
+
+        // 初始化檢查網址參數是否有 Room ID
+        window.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const roomId = urlParams.get('room');
+            if (roomId) {
+                joinRoom(roomId);
+            } else {
+                // 嘗試從本地快取回復上次訪問的房間
+                const cachedRoomId = localStorage.getItem('last_room_id');
+                if (cachedRoomId) {
+                    joinRoom(cachedRoomId);
+                }
+            }
+        });
+
+        // 隨機產生房間代碼 (6碼英數)
+        function generateRoomCode() {
+            return Math.random().toString(36).substring(2, 8).toUpperCase();
+        }
+
+        // 建立新房間
+        async function createNewRoom() {
+            const newRoomId = generateRoomCode();
+            const initialData = {
+                budget: 40000,
+                expenses: {}
+            };
+            try {
+                await setDoc(doc(db, "rooms", newRoomId), initialData);
+                joinRoom(newRoomId);
+            } catch (error) {
+                alert("建立房間失敗，請檢查 Firebase 設定是否正確！");
+                console.error(error);
+            }
+        }
+
+        // 加入並監聽指定房間
+        function joinRoom(roomId) {
+            currentRoomId = roomId;
+            localStorage.setItem('last_room_id', roomId);
+            
+            // 更新網址與 UI
+            const newUrl = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
+            window.history.replaceState({ path: newUrl }, '', newUrl);
+            document.getElementById('shareUrlInput').value = newUrl;
+            document.getElementById('roomCodeDisplay').innerText = roomId;
+            document.getElementById('roomBadge').classList.remove('hidden');
+            document.getElementById('roomPanel').classList.add('hidden');
+            document.getElementById('mainApp').classList.remove('hidden');
+
+            // 監聽 Firestore 即時更新
+            onSnapshot(doc(db, "rooms", roomId), (docSnap) => {
+                if (docSnap.exists()) {
+                    roomData = docSnap.data();
+                    if (!roomData.expenses) roomData.expenses = {};
+                    // 將資料備份至 localStorage 快取
+                    localStorage.setItem(`cache_room_${roomId}`, JSON.stringify(roomData));
+                    document.getElementById('totalBudgetInput').value = roomData.budget || 0;
+                    renderApp();
+                } else {
+                    // 若雲端無資料但本地有快取，防呆重建
+                    const localCache = localStorage.getItem(`cache_room_${roomId}`);
+                    if (localCache) {
+                        roomData = JSON.parse(localCache);
+                        setDoc(doc(db, "rooms", roomId), roomData);
+                        renderApp();
+                    } else {
+                        alert("找不到此房間帳目資料，為您重新導向。");
+                        localStorage.removeItem('last_room_id');
+                        window.location.search = '';
+                    }
+                }
+            }, (error) => {
+                console.warn("Firestore 即時連線中斷，切換為本地快取模式:", error);
+                const localCache = localStorage.getItem(`cache_room_${roomId}`);
+                if (localCache) {
+                    roomData = JSON.parse(localCache);
+                    renderApp();
+                }
+            });
+        }
+
+        // 複製分享網址
+        function copyShareUrl() {
+            const input = document.getElementById('shareUrlInput');
+            input.select();
+            document.execCommand('copy');
+            alert('房間分享網址已複製！快傳給好友吧！');
+        }
+
+        // 更新雲端預算
+        async function updateBudgetView() {
+            const budgetValue = parseFloat(document.getElementById('totalBudgetInput').value) || 0;
+            roomData.budget = budgetValue;
+            await updateDoc(doc(db, "rooms", currentRoomId), { budget: budgetValue });
+        }
+
+        // 表單提交處理 (新增與修改)
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+            const id = document.getElementById('editExpenseId').value || 'exp_' + Date.now();
+            const title = document.getElementById('expTitle').value;
+            const amount = parseFloat(document.getElementById('expAmount').value) || 0;
+            const category = document.getElementById('expCategory').value;
+            const payer = document.getElementById('expPayer').value;
+            const notes = document.getElementById('expNotes').value;
+            
+            // 取得分攤複選
+            const checkboxes = document.querySelectorAll('input[name="splitMembers"]:checked');
+            const splitTo = Array.from(checkboxes).map(cb => cb.value);
+
+            if (splitTo.length === 0) {
+                alert('請至少選擇一位分攤人員！');
+                return;
+            }
+
+            const timestamp = document.getElementById('editExpenseId').value ? roomData.expenses[id].timestamp : Date.now();
+
+            roomData.expenses[id] = {
+                id, title, amount, category, payer, splitTo, notes, timestamp
+            };
+
+            await updateDoc(doc(db, "rooms", currentRoomId), { expenses: roomData.expenses });
+            resetExpenseForm();
+        }
+
+        // 進入編輯狀態
+        function editExpense(id) {
+            const exp = roomData.expenses[id];
+            if (!exp) return;
+
+            document.getElementById('editExpenseId').value = exp.id;
+            document.getElementById('expTitle').value = exp.title;
+            document.getElementById('expAmount').value = exp.amount;
+            document.getElementById('expCategory').value = exp.category;
+            document.getElementById('expPayer').value = exp.payer;
+            document.getElementById('expNotes').value = exp.notes || '';
+
+            // 勾選分攤人
+            const checkboxes = document.querySelectorAll('input[name="splitMembers"]');
+            checkboxes.forEach(cb => {
+                cb.checked = exp.splitTo.includes(cb.value);
+            });
+
+            document.getElementById('formTitle').innerHTML = `<i class="fa-solid fa-pen-to-square mr-2 text-amber-600"></i>編輯款項支出`;
+            document.getElementById('cancelEditBtn').classList.remove('hidden');
+            document.getElementById('expenseForm').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // 刪除款項
+        async function deleteExpense(id) {
+            if (confirm('確定要刪除這筆支出紀錄嗎？')) {
+                delete roomData.expenses[id];
+                await updateDoc(doc(db, "rooms", currentRoomId), { expenses: roomData.expenses });
+                resetExpenseForm();
+            }
+        }
+
+        // 清空重設表單
+        function resetExpenseForm() {
+            document.getElementById('expenseForm').reset();
+            document.getElementById('editExpenseId').value = '';
+            document.getElementById('formTitle').innerHTML = `<i class="fa-solid fa-pen-to-square mr-2"></i>新增款項支出`;
+            document.getElementById('cancelEditBtn').classList.add('hidden');
+            // 預設全選分攤
+            const checkboxes = document.querySelectorAll('input[name="splitMembers"]');
+            checkboxes.forEach(cb => cb.checked = true);
+        }
+
+        // 核心渲染引擎：計算財務、渲染畫面、畫出圖表
+        function renderApp() {
+            const expensesList = Object.values(roomData.expenses || {});
+            
+            // 1. 搜尋與排序過濾
+            const keyword = document.getElementById('searchBar').value.toLowerCase();
+            const sortBy = document.getElementById('sortBy').value;
+
+            let filteredExpenses = expensesList.filter(exp => {
+                return exp.title.toLowerCase().includes(keyword) || (exp.notes && exp.notes.toLowerCase().includes(keyword));
+            });
+
+            filteredExpenses.sort((a, b) => {
+                if (sortBy === 'dateDesc') return b.timestamp - a.timestamp;
+                if (sortBy === 'dateAsc') return a.timestamp - b.timestamp;
+                if (sortBy === 'amountDesc') return b.amount - a.amount;
+                return 0;
+            });
+
+            // 2. 計算核心帳務數據
+            let totalSpent = 0;
+            let stats = {};
+            MEMBERS.forEach(m => stats[m] = { paid: 0, debt: 0, net: 0 });
+            let catStats = { '交通': 0, '住宿': 0, '飲食': 0, '娛樂': 0, '其他': 0 };
+
+            expensesList.forEach(exp => {
+                const amt = exp.amount;
+                totalSpent += amt;
+                
+                // 統計分類
+                if (catStats[exp.category] !== undefined) {
+                    catStats[exp.category] += amt;
+                }
+
+                // 統計支付者金額
+                if (stats[exp.payer]) {
+                    stats[exp.payer].paid += amt;
+                }
+
+                // 統計分攤者應負擔金額
+                const shareCount = exp.splitTo.length;
+                if (shareCount > 0) {
+                    const perShare = amt / shareCount;
+                    exp.splitTo.forEach(m => {
+                        if (stats[m]) stats[m].debt += perShare;
+                    });
+                }
+            });
+
+            // 計算每位成員的收支淨額 (Net)
+            MEMBERS.forEach(m => {
+                stats[m].net = stats[m].paid - stats[m].debt;
+            });
+
+            // 3. 渲染預算條
+            document.getElementById('bgSpent').innerText = Math.round(totalSpent).toLocaleString();
+            const budget = roomData.budget || 0;
+            const remain = budget - totalSpent;
+            document.getElementById('bgLeft').innerText = Math.round(remain).toLocaleString();
+            
+            const percent = budget > 0 ? Math.min((totalSpent / budget) * 100, 100) : 0;
+            const budgetBar = document.getElementById('budgetBar');
+            budgetBar.style.width = `${percent}%`;
+            
+            if (totalSpent > budget && budget > 0) {
+                budgetBar.className = "bg-red-500 h-full transition-all duration-300";
+                document.getElementById('budgetWarning').classList.remove('hidden');
+            } else {
+                budgetBar.className = "bg-emerald-500 h-full transition-all duration-300";
+                document.getElementById('budgetWarning').classList.add('hidden');
+            }
+
+            // 4. 渲染明細清單表格
+            const tbody = document.getElementById('expenseTableBody');
+            tbody.innerHTML = '';
+            
+            if (filteredExpenses.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-slate-400">目前沒有符合的款項紀錄</td></tr>`;
+            } else {
+                filteredExpenses.forEach(exp => {
+                    const dateStr = new Date(exp.timestamp).toLocaleDateString('zh-TW', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'});
+                    const tr = document.createElement('tr');
+                    tr.className = "border-b border-slate-100 hover:bg-slate-50/50 text-xs sm:text-sm";
+                    tr.innerHTML = `
+                        <td class="p-2 max-w-[120px] break-all">
+                            <div class="font-bold text-slate-700">${exp.title}</div>
+                            <div class="text-[10px] text-slate-400">${dateStr}</div>
+                        </td>
+                        <td class="p-2"><span class="px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 text-[11px] font-medium">${exp.category}</span></td>
+                        <td class="p-2 text-right font-bold text-slate-700">${Math.round(exp.amount).toLocaleString()}</td>
+                        <td class="p-2 text-slate-500 text-[11px]">
+                            <div>付款: <span class="font-semibold text-slate-700">${exp.payer}</span></div>
+                            <div class="truncate max-w-[150px]">分攤: ${exp.splitTo.join(', ')}</div>
+                            ${exp.notes ? `<div class="text-slate-400 italic">註: ${exp.notes}</div>` : ''}
+                        </td>
+                        <td class="p-2 text-center space-x-1">
+                            <button onclick="editExpense('${exp.id}')" class="text-sky-600 hover:text-sky-800 p-1"><i class="fa-solid fa-pen"></i></button>
+                            <button onclick="deleteExpense('${exp.id}')" class="text-red-500 hover:text-red-700 p-1"><i class="fa-solid fa-trash"></i></button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            // 5. 渲染成員帳務統計表格
+            const statsTbody = document.getElementById('memberStatsTable');
+            statsTbody.innerHTML = '';
+            MEMBERS.forEach(m => {
+                const s = stats[m];
+                const netColor = s.net >= 0 ? 'text-emerald-600 font-bold' : 'text-red-500 font-bold';
+                const netPrefix = s.net > 0 ? '+' : '';
+                const tr = document.createElement('tr');
+                tr.className = "border-b border-slate-100 last:border-none";
+                tr.innerHTML = `
+                    <td class="py-2.5 font-bold text-slate-700">${m}</td>
+                    <td class="py-2.5 text-right text-slate-600">${Math.round(s.paid).toLocaleString()}</td>
+                    <td class="py-2.5 text-right text-slate-600">${Math.round(s.debt).toLocaleString()}</td>
+                    <td class="py-2.5 text-right ${netColor}">${netPrefix}${Math.round(s.net).toLocaleString()}</td>
+                `;
+                statsTbody.appendChild(tr);
+            });
+
+            // 6. 核心精華：最佳化帳務結算算法 (最少轉帳次數)
+            computeGreedySettlement(stats);
+
+            // 7. 更新 Chart.js 圖表
+            renderCharts(stats, catStats);
+        }
+
+        // 貪婪演算法：計算出最精簡的轉帳路徑
+        function computeGreedySettlement(stats) {
+            const settlementContainer = document.getElementById('settlementResults');
+            settlementContainer.innerHTML = '';
+
+            // 將所有人區分為「債權人(該收錢)」與「債務人(該給錢)」
+            let debtors = [];
+            let creditors = [];
+
+            MEMBERS.forEach(m => {
+                let net = Math.round(stats[m].net);
+                if (net < -0.5) {
+                    debtors.push({ name: m, amount: Math.abs(net) });
+                } else if (net > 0.5) {
+                    creditors.push({ name: m, amount: net });
+                }
+            });
+
+            // 排序，大金額優先處理
+            debtors.sort((a, b) => b.amount - a.amount);
+            creditors.sort((a, b) => b.amount - a.amount);
+
+            let routes = [];
+
+            let i = 0, j = 0;
+            while (i < debtors.length && j < creditors.length) {
+                let debtor = debtors[i];
+                let creditor = creditors[j];
+
+                let settledAmount = Math.min(debtor.amount, creditor.amount);
+                
+                if (settledAmount > 0) {
+                    routes.push({
+                        from: debtor.name,
+                        to: creditor.name,
+                        amount: Math.round(settledAmount)
+                    });
+                }
+
+                debtor.amount -= settledAmount;
+                creditor.amount -= settledAmount;
+
+                if (debtor.amount <= 1) i++;
+                if (creditor.amount <= 1) j++;
+            }
+
+            // 輸出結果至大字體區塊
+            if (routes.length === 0) {
+                settlementContainer.innerHTML = `<span class="text-base font-medium text-emerald-600 bg-emerald-50 px-4 py-2 rounded-full border border-emerald-200"><i class="fa-solid fa-circle-check mr-1"></i>款項完全打平，互不相欠！</span>`;
+            } else {
+                routes.forEach(r => {
+                    const row = document.createElement('div');
+                    row.className = "flex items-center gap-3 bg-white px-6 py-2 rounded-xl shadow-sm border border-sky-100 w-full justify-center";
+                    row.innerHTML = `
+                        <span class="text-red-500 font-extrabold">${r.from}</span>
+                        <span class="text-sm font-medium text-slate-400">➔</span>
+                        <span class="text-emerald-600 font-extrabold">${r.to}</span>
+                        <span class="text-sky-600 font-black ml-2">${r.amount.toLocaleString()} <span class="text-xs font-normal text-slate-500">元</span></span>
+                    `;
+                    settlementContainer.appendChild(row);
+                });
+            }
+        }
+
+        // 渲染圖表函式
+        function renderCharts(stats, catStats) {
+            // 銷毀舊圖表實例避免重疊錯誤
+            if (pieChartInstance) pieChartInstance.destroy();
+            if (barChartInstance) barChartInstance.destroy();
+
+            // 圓餅圖：每人支付比例
+            const ctxPie = document.getElementById('payPieChart').getContext('2d');
+            pieChartInstance = new Chart(ctxPie, {
+                type: 'pie',
+                data: {
+                    labels: MEMBERS,
+                    datasets: [{
+                        data: MEMBERS.map(m => stats[m].paid),
+                        backgroundColor: ['#38bdf8', '#60a5fa', '#34d399', '#f43f5e']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { 
+                        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } },
+                        title: { display: true, text: '每人支付比例', font: { size: 11, weight: 'bold' } }
+                    }
+                }
+            });
+
+            // 長條圖：類別支出統計
+            const ctxBar = document.getElementById('categoryBarChart').getContext('2d');
+            const catLabels = Object.keys(catStats);
+            barChartInstance = new Chart(ctxBar, {
+                type: 'bar',
+                data: {
+                    labels: catLabels,
+                    datasets: [{
+                        data: Object.values(catStats),
+                        backgroundColor: '#0284c7'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { 
+                        legend: { display: false },
+                        title: { display: true, text: '各類別支出金額', font: { size: 11, weight: 'bold' } }
+                    },
+                    scales: { y: { beginAtZero: true, ticks: { font: { size: 9 } } }, x: { ticks: { font: { size: 10 } } } }
+                }
+            });
+        }
+
+        // JSON備份功能：匯出
+        function exportToJson() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(roomData, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `澎湖分帳備份_房間_${currentRoomId}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+
+        // JSON備份功能：匯入
+        function importFromJson(event) {
+            const fileReader = new FileReader();
+            fileReader.onload = async function(e) {
+                try {
+                    const parsedData = JSON.parse(e.target.result);
+                    if (parsedData && (parsedData.expenses || parsedData.budget)) {
+                        roomData.budget = parsedData.budget || 40000;
+                        roomData.expenses = parsedData.expenses || {};
+                        
+                        // 更新至雲端
+                        await setDoc(doc(db, "rooms", currentRoomId), roomData);
+                        alert('JSON 資料成功匯入，並同步至雲端資料庫！');
+                    } else {
+                        alert('檔案內容格式不正確，無法匯入！');
+                    }
+                } catch (err) {
+                    alert('讀取 JSON 發生錯誤，請確認檔案是否損毀。');
+                }
+            };
+            fileReader.readAsText(event.target.files[0]);
+        }
+    </script>
+</body>
+</html>
